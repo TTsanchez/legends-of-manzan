@@ -506,7 +506,7 @@
             else stopMusic();
         }
         function initSounds() {
-            bgMusic = createAudio(MUSIC_FILE, true, 0.3);
+            bgMusic = createAudio(MUSIC_FILE, true, 0.18);
             recordSound = createAudio(RECORD_SOUND, false, 0.7);
             JUMP_SOUNDS.forEach(s => { const a = createAudio(s, false, 0.5); if (a) jumpSounds.push(a); });
             DEATH_SOUNDS.forEach(s => { const a = createAudio(s, false, 0.6); if (a) deathSounds.push(a); });
