@@ -7,68 +7,28 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>LegendsOfManzan - С фоновыми объектами</title>
     <style>
-        * {
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { user-select: none; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            width: 100%;
-            height: 100%;
-            background: #000000;
-            overflow: hidden;
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%; height: 100%; background: #000000; overflow: hidden;
         }
-
         body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
+            margin: 0; padding: 0; overflow: hidden;
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
-
-        ::-webkit-scrollbar {
-            display: none;
-        }
-
+        ::-webkit-scrollbar { display: none; }
         canvas {
-            display: block;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            cursor: pointer;
-            image-rendering: crisp-edges;
-            image-rendering: -webkit-optimize-contrast;
+            display: block; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; cursor: pointer;
+            image-rendering: crisp-edges; image-rendering: -webkit-optimize-contrast;
         }
-
         @media (max-width: 768px) and (orientation: portrait) {
             body::before {
                 content: "📱 ПОВЕРНИТЕ ТЕЛЕФОН В ГОРИЗОНТАЛЬНОЕ ПОЛОЖЕНИЕ 📱";
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: #000;
-                color: #fff;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                text-align: center;
-                font-size: 1.2rem;
-                padding: 20px;
-                z-index: 9999;
-                font-family: monospace;
-                backdrop-filter: blur(10px);
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: #000; color: #fff; display: flex; align-items: center; justify-content: center;
+                text-align: center; font-size: 1.2rem; padding: 20px; z-index: 9999;
+                font-family: monospace; backdrop-filter: blur(10px);
             }
         }
     </style>
@@ -86,20 +46,28 @@
         
         const pixelRatio = window.devicePixelRatio || 1;
         
-        // ========== ФУНКЦИЯ ПОЛНОЭКРАННОГО РЕЖИМА ==========
         function requestFullscreen() {
             const elem = document.documentElement;
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen().catch(err => console.log(err));
-            } else if (elem.webkitRequestFullscreen) {
-                elem.webkitRequestFullscreen();
-            }
+            if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
+            else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
         }
         
-        // ========== НАСТРОЙКИ ИГРЫ ==========
+        // ============================================================
+        //  ПУТИ К ФАЙЛАМ — МЕНЯЙ ЗДЕСЬ
+        // ============================================================
+        const OBSTACLE_IMAGE          = "boss1.png";
+        const OBSTACLE_BROKEN_IMAGE   = "broken.png";
+        const OBSTACLE_FRAGMENT_IMAGE = "osk.png";
+        
+        // ============================================================
+        
         const CONFIG = {
             GROUND_Y_PERCENT: 68,
             JUMP_HEIGHT_PERCENT: 28,
+            // Ускорение свободного падения в пикселях в секунду^2.
+            // Без этого параметра jumpVelocity становился NaN, и персонаж
+            // исчезал после первого прыжка.
+            GRAVITY_PX_PER_SEC2: 2200,
             PLAYER_WIDTH_PERCENT: 18,
             PLAYER_HEIGHT_PERCENT: 26,
             PLAYER_X_PERCENT: 8,
@@ -108,12 +76,36 @@
             HITBOX_HEIGHT_PERCENT: 85,
             HITBOX_OFFSET_X_PERCENT: 12,
             HITBOX_OFFSET_Y_PERCENT: 0,
-            OBSTACLE_SIZE_PERCENT: 14,
-            GRAVITY_PX_PER_FRAME2: 0.65,
-            BASE_SPEED_PX_PER_FRAME: 7,
-            MAX_SPEED_PX_PER_FRAME: 26,
-            SCORE_SPEED_INCREASE: 400,
-            SPAWN_BASE_RATE: 70,
+            
+            // ============ ПРЕПЯТСТВИЕ ============
+            OBSTACLE_SIZE_PERCENT: 18,
+            OBSTACLE_Y_OFFSET_PERCENT: 5,
+            OBSTACLE_HITBOX_W_PERCENT: 65,
+            OBSTACLE_HITBOX_H_PERCENT: 65,
+            OBSTACLE_HITBOX_OFFSET_X_PERCENT: 18,
+            OBSTACLE_HITBOX_OFFSET_Y_PERCENT: -3,
+            
+            // Безопасный зазор (страховка от сближения на высокой скорости)
+            OBSTACLE_MIN_TIME_GAP_SEC: 1.2,
+            OBSTACLE_MIN_GAP_PX: 480,
+            OBSTACLE_MAX_ON_SCREEN: 4,
+            
+            // ============ СКОРОСТЬ (главное для «ускорения всего») ============
+            BASE_SPEED_PX_PER_SEC: 480,
+            MAX_SPEED_PX_PER_SEC: 1560,
+            SPEED_ACCEL_PX_PER_SEC2: 180,
+            SCORE_SPEED_INCREASE: 100,       // каждые 100 очков — новый уровень скорости
+            SPEED_PER_SCORE_LEVEL: 60,       // +60 px/s за уровень
+            
+            SCORE_PER_SECOND: 2,
+            SCORE_PER_OBSTACLE: 15,
+            SCORE_PER_OBSTACLE_PASS: 10,
+            
+            // ============ СПАВН (редкий и постоянный) ============
+            SPAWN_BASE_RATE_FRAMES: 40,
+            SPAWN_RATE_REDUCTION: 3,
+            SPAWN_CHANCE: 0.55,
+            
             GRASS_HEIGHT_PERCENT: 28,
             GRASS_SPEED_MULT: 0.8,
             UI_FONT_SIZE_PERCENT: 1.2,
@@ -121,91 +113,48 @@
             GAMEOVER_FONT_SIZE_PERCENT: 2,
             GAMEOVER_BTN_WIDTH_PERCENT: 28,
             GAMEOVER_BTN_HEIGHT_PERCENT: 7,
+            
             BACKGROUND_OBJECTS: {
-                ENABLED: true,           // ← ВКЛЮЧАЕМ фоновые объекты!
-                SPAWN_CHANCE: 0.015,     // чуть реже появляются
-                MIN_DISTANCE: 1000,
-                MAX_OBJECTS: 3,
+                ENABLED: true,
+                SPAWN_CHANCE_PER_FRAME: 0.005,
+                MIN_DISTANCE: 1600,
+                MAX_OBJECTS: 2,
             },
+            
+            FRAGMENT_COUNT: 8,
+            DEATH_DELAY_SECONDS: 1.4,
+            FRAGMENT_GRAVITY: 1400,
+            FRAGMENT_LIFE: 2.8,
         };
         
-        // ========== ФОНОВЫЕ ОБЪЕКТЫ (с обработкой ошибок) ==========
+        const MAX_DT = 0.1;
+        const RUN_ANIM_FRAME_TIME = 6 / 60;
+        const RECORD_NOTIF_DURATION = 2.0;
+        
         const BG_OBJECTS_CONFIG = [
-            {
-                type: "static",
-                image: "manz/zabor.png",
-                sizePercent: 14,
-                sinkPercent: 25,
-                speedMult: 0.6,
-                spawnWeight: 1,
-                name: "Забор"
-            },
-            {
-                type: "static",
-                image: "manz/вышка.png",
-                sizePercent: 45,
-                sinkPercent: 6,
-                speedMult: 0.6,
-                spawnWeight: 0.5,
-                name: "Вышка"
-            },
-            {
-                type: "static",
-                image: "manz/вышка2.png",
-                sizePercent: 45,
-                sinkPercent: 6,
-                speedMult: 0.6,
-                spawnWeight: 0.5,
-                name: "Вышка2"
-            },
+            { type: "static", image: "manz/zabor.png",   sizePercent: 14, sinkPercent: 25, speedMult: 0.6, spawnWeight: 1,   name: "Забор" },
+            { type: "static", image: "manz/вышка.png",   sizePercent: 45, sinkPercent: 6,  speedMult: 0.6, spawnWeight: 0.5, name: "Вышка" },
+            { type: "static", image: "manz/вышка2.png",  sizePercent: 45, sinkPercent: 6,  speedMult: 0.6, spawnWeight: 0.5, name: "Вышка2" },
             {
                 type: "animated",
-                frames: [
-                    "lexa/IMG_4700_00000.png", "lexa/IMG_4700_00001.png", "lexa/IMG_4700_00002.png",
-                    "lexa/IMG_4700_00003.png", "lexa/IMG_4700_00004.png", "lexa/IMG_4700_00005.png",
-                    "lexa/IMG_4700_00006.png", "lexa/IMG_4700_00007.png", "lexa/IMG_4700_00008.png",
-                    "lexa/IMG_4700_00009.png", "lexa/IMG_4700_00010.png", "lexa/IMG_4700_00011.png",
-                    "lexa/IMG_4700_00012.png", "lexa/IMG_4700_00013.png", "lexa/IMG_4700_00014.png",
-                    "lexa/IMG_4700_00015.png", "lexa/IMG_4700_00016.png", "lexa/IMG_4700_00017.png",
-                    "lexa/IMG_4700_00018.png", "lexa/IMG_4700_00019.png", "lexa/IMG_4700_00020.png",
-                    "lexa/IMG_4700_00021.png", "lexa/IMG_4700_00022.png", "lexa/IMG_4700_00023.png",
-                    "lexa/IMG_4700_00024.png", "lexa/IMG_4700_00025.png", "lexa/IMG_4700_00026.png",
-                    "lexa/IMG_4700_00027.png", "lexa/IMG_4700_00028.png", "lexa/IMG_4700_00029.png",
-                    "lexa/IMG_4700_00030.png", "lexa/IMG_4700_00031.png", "lexa/IMG_4700_00032.png",
-                    "lexa/IMG_4700_00033.png", "lexa/IMG_4700_00034.png", "lexa/IMG_4700_00035.png",
-                    "lexa/IMG_4700_00036.png", "lexa/IMG_4700_00037.png", "lexa/IMG_4700_00038.png",
-                    "lexa/IMG_4700_00039.png", "lexa/IMG_4700_00040.png", "lexa/IMG_4700_00041.png",
-                    "lexa/IMG_4700_00042.png", "lexa/IMG_4700_00043.png", "lexa/IMG_4700_00044.png",
-                    "lexa/IMG_4700_00045.png", "lexa/IMG_4700_00046.png", "lexa/IMG_4700_00047.png",
-                    "lexa/IMG_4700_00048.png", "lexa/IMG_4700_00049.png", "lexa/IMG_4700_00050.png",
-                    "lexa/IMG_4700_00051.png", "lexa/IMG_4700_00052.png", "lexa/IMG_4700_00053.png",
-                    "lexa/IMG_4700_00054.png"
-                ],
+                frames: Array.from({length: 55}, (_, i) => `lexa/IMG_4700_${String(i).padStart(5,'0')}.png`),
                 frameDelay: 2,
-                sizePercent: 20,
-                sinkPercent: 5,
-                speedMult: 0.6,
-                spawnWeight: 0.8,
-                name: "leha"
+                sizePercent: 20, sinkPercent: 5, speedMult: 0.6, spawnWeight: 0.8, name: "leha"
             },
         ];
         
-        // ========== ПУТИ К ФАЙЛАМ ==========
         const GRASS_TEXTURE_IMAGE = "manz/grass_z.png";
         const RUN_FRAMES = ["manz/1.png", "manz/2.png", "manz/3.png", "manz/4.png"];
         const JUMP_SPRITE = "manz/jump.png";
-        const RIB_SPRITE = "pngtree-roasted-pork-ribs-png-image_13146536.png";
         const PARIS_BG_IMAGE = "manz/back.jpg";
         const MUSIC_FILE = "french meme song.mp3";
         const RECORD_SOUND = "manz/record.mp3";
         const JUMP_SOUNDS = ["manz/jump1.mp3", "manz/jump2.mp3"];
         const DEATH_SOUNDS = ["manz/death1.mp3", "manz/death3.mp3"];
         
-        // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
         let screenWidth = 0, screenHeight = 0;
         let groundY = 0;
         let jumpVelocity = 0;
-        let gravity = CONFIG.GRAVITY_PX_PER_FRAME2;
         let currentSpeed = 0;
         
         let playerWidth = 0, playerHeight = 0;
@@ -213,6 +162,7 @@
         let hitboxW = 0, hitboxH = 0, hitboxX = 0, hitboxY = 0;
         
         let obstacleSize = 0;
+        let obstacleYOffset = 0;
         let obstacleHitboxW = 0, obstacleHitboxH = 0, obstacleHitboxX = 0, obstacleHitboxY = 0;
         
         let grassHeight = 0, grassWidth = 0, textureOffset = 0;
@@ -223,8 +173,7 @@
         let gameStarted = false;
         let gameRunning = true;
         let score = 0;
-        let highScore = localStorage.getItem('ribHighScore') ? parseInt(localStorage.getItem('ribHighScore')) : 0;
-        let frame = 0;
+        let highScore = parseInt(localStorage.getItem('ribHighScore')) || 0;
         
         let isJumping = false;
         let yPos = 0;
@@ -232,13 +181,22 @@
         let pendingJump = false;
         
         let currentRunFrame = 0;
-        let frameCounter = 0;
+        let runAnimTimer = 0;
         let obstacles = [];
+        
+        let fragments = [];
+        let breakingObstacles = [];
+        let deathTimer = 0;
         
         let grassTexture = null;
         let runImages = [];
         let jumpImage = null;
         let ribImage = null;
+        let brokenObstacleImage = null;
+        let fragmentImage = null;
+        let brokenLoaded = false;
+        let fragmentLoaded = false;
+        
         let parisBackground = new Image();
         let backgroundLoaded = false;
         let grassTextureLoaded = false;
@@ -255,32 +213,131 @@
         let showRecordNotification = false;
         let recordNotificationTimer = 0;
         
-        // Фоновые объекты
         let bgObjectsData = [];
         let bgObjectsList = [];
         let bgObjectsReady = false;
         
-        // Подсчёт ресурсов для загрузки
         function calculateTotalToLoad() {
-            let total = RUN_FRAMES.length + 4; // бег, прыжок, ребро, фон, трава
+            let total = RUN_FRAMES.length + 4;
+            total += 1;
+            if (OBSTACLE_FRAGMENT_IMAGE && OBSTACLE_FRAGMENT_IMAGE !== "") total += 1;
             if (CONFIG.BACKGROUND_OBJECTS.ENABLED) {
-                for (let obj of BG_OBJECTS_CONFIG) {
-                    if (obj.type === "static") total += 1;
-                    else if (obj.type === "animated") total += obj.frames.length;
+                for (const obj of BG_OBJECTS_CONFIG) {
+                    total += obj.type === "static" ? 1 : obj.frames.length;
                 }
             }
             return total;
         }
+        const totalToLoad = calculateTotalToLoad();
         
-        let totalToLoad = calculateTotalToLoad();
+        function imageLoaded() {
+            if (++loadedCount >= totalToLoad) bgObjectsReady = true;
+        }
         
-        // ========== РАЗМЕРЫ И ФИЗИКА ==========
+        for (const src of RUN_FRAMES) {
+            const img = new Image();
+            img.onload = img.onerror = imageLoaded;
+            img.src = src;
+            runImages.push(img);
+        }
+        
+        jumpImage = new Image();
+        jumpImage.onload = jumpImage.onerror = imageLoaded;
+        jumpImage.src = JUMP_SPRITE;
+        
+        ribImage = new Image();
+        ribImage.onload = () => {
+            if (ribImage.naturalWidth > 0) {
+                console.log("✅ Целое препятствие загружено:", OBSTACLE_IMAGE,
+                            ribImage.naturalWidth + "×" + ribImage.naturalHeight);
+            }
+            imageLoaded();
+        };
+        ribImage.onerror = () => {
+            console.warn("⚠️ 404 — НЕ найден файл:", OBSTACLE_IMAGE);
+            imageLoaded();
+        };
+        ribImage.src = OBSTACLE_IMAGE;
+        
+        brokenObstacleImage = new Image();
+        brokenObstacleImage.onload = () => {
+            if (brokenObstacleImage.naturalWidth > 0) {
+                brokenLoaded = true;
+                console.log("✅ Разбитая картинка загружена:", OBSTACLE_BROKEN_IMAGE,
+                            brokenObstacleImage.naturalWidth + "×" + brokenObstacleImage.naturalHeight);
+            }
+            imageLoaded();
+        };
+        brokenObstacleImage.onerror = () => {
+            brokenLoaded = false;
+            console.warn("⚠️ 404 — НЕ найден файл:", OBSTACLE_BROKEN_IMAGE);
+            imageLoaded();
+        };
+        brokenObstacleImage.src = OBSTACLE_BROKEN_IMAGE;
+        
+        if (OBSTACLE_FRAGMENT_IMAGE && OBSTACLE_FRAGMENT_IMAGE !== "") {
+            fragmentImage = new Image();
+            fragmentImage.onload = () => {
+                if (fragmentImage.naturalWidth > 0) {
+                    fragmentLoaded = true;
+                    console.log("✅ Осколок загружен:", OBSTACLE_FRAGMENT_IMAGE,
+                                fragmentImage.naturalWidth + "×" + fragmentImage.naturalHeight);
+                }
+                imageLoaded();
+            };
+            fragmentImage.onerror = () => {
+                fragmentLoaded = false;
+                console.warn("⚠️ 404 — НЕ найден файл осколка:", OBSTACLE_FRAGMENT_IMAGE);
+                imageLoaded();
+            };
+            fragmentImage.src = OBSTACLE_FRAGMENT_IMAGE;
+        } else {
+            fragmentImage = brokenObstacleImage;
+            fragmentLoaded = brokenLoaded;
+        }
+        
+        parisBackground.onload = () => { backgroundLoaded = true; imageLoaded(); };
+        parisBackground.onerror = () => { backgroundLoaded = false; imageLoaded(); };
+        parisBackground.src = PARIS_BG_IMAGE;
+        
+        grassTexture = new Image();
+        grassTexture.onload = () => { grassTextureLoaded = true; imageLoaded(); };
+        grassTexture.onerror = () => { grassTextureLoaded = false; imageLoaded(); };
+        grassTexture.src = GRASS_TEXTURE_IMAGE;
+        
+        loadBackgroundObjects();
+        
+        function loadBackgroundObjects() {
+            if (!CONFIG.BACKGROUND_OBJECTS.ENABLED) { bgObjectsReady = true; return; }
+            for (const config of BG_OBJECTS_CONFIG) {
+                if (config.type === "static") {
+                    const img = new Image();
+                    img.onload = img.onerror = imageLoaded;
+                    img.src = config.image;
+                    bgObjectsData.push({ type: "static", image: img, config });
+                } else if (config.type === "animated") {
+                    const frames = [];
+                    for (const f of config.frames) {
+                        const fi = new Image();
+                        fi.onload = fi.onerror = imageLoaded;
+                        fi.src = f;
+                        frames.push(fi);
+                    }
+                    bgObjectsData.push({
+                        type: "animated", frames, config,
+                        currentFrame: 0, frameTimer: 0
+                    });
+                }
+            }
+        }
+        
         function resizeCanvas() {
+            const oldW = screenWidth || window.innerWidth;
             screenWidth = window.innerWidth;
             screenHeight = window.innerHeight;
             
-            canvas.width = screenWidth * pixelRatio;
-            canvas.height = screenHeight * pixelRatio;
+            canvas.width = Math.round(screenWidth * pixelRatio);
+            canvas.height = Math.round(screenHeight * pixelRatio);
             canvas.style.width = screenWidth + 'px';
             canvas.style.height = screenHeight + 'px';
             
@@ -288,11 +345,19 @@
             ctx.scale(pixelRatio, pixelRatio);
             
             recalcSizes();
+            
+            if (oldW > 0 && oldW !== screenWidth && gameStarted) {
+                const sx = screenWidth / oldW;
+                for (const o of obstacles) o.x *= sx;
+                for (const o of bgObjectsList) o.x *= sx;
+                for (const o of breakingObstacles) o.x *= sx;
+                for (const o of fragments) o.x *= sx;
+            }
         }
         
         function recalcPhysics() {
             const jumpHeightPx = screenHeight * (CONFIG.JUMP_HEIGHT_PERCENT / 100);
-            jumpVelocity = Math.sqrt(2 * gravity * jumpHeightPx);
+            jumpVelocity = Math.sqrt(2 * CONFIG.GRAVITY_PX_PER_SEC2 * jumpHeightPx);
         }
         
         function recalcSizes() {
@@ -309,10 +374,12 @@
             hitboxY = (playerHeight - hitboxH) + playerHeight * (CONFIG.HITBOX_OFFSET_Y_PERCENT / 100);
             
             obstacleSize = screenHeight * (CONFIG.OBSTACLE_SIZE_PERCENT / 100);
-            obstacleHitboxW = obstacleSize * 0.65;
-            obstacleHitboxH = obstacleSize * 0.65;
-            obstacleHitboxX = obstacleSize * 0.18;
-            obstacleHitboxY = -obstacleSize * 0.03;
+            obstacleYOffset = screenHeight * (CONFIG.OBSTACLE_Y_OFFSET_PERCENT / 100);
+            
+            obstacleHitboxW = obstacleSize * (CONFIG.OBSTACLE_HITBOX_W_PERCENT / 100);
+            obstacleHitboxH = obstacleSize * (CONFIG.OBSTACLE_HITBOX_H_PERCENT / 100);
+            obstacleHitboxX = obstacleSize * (CONFIG.OBSTACLE_HITBOX_OFFSET_X_PERCENT / 100);
+            obstacleHitboxY = obstacleSize * (CONFIG.OBSTACLE_HITBOX_OFFSET_Y_PERCENT / 100);
             
             grassHeight = screenHeight * (CONFIG.GRASS_HEIGHT_PERCENT / 100);
             grassWidth = grassHeight * 1.5;
@@ -323,114 +390,12 @@
             gameOverBtnW = screenWidth * (CONFIG.GAMEOVER_BTN_WIDTH_PERCENT / 100);
             gameOverBtnH = screenHeight * (CONFIG.GAMEOVER_BTN_HEIGHT_PERCENT / 100);
             
-            currentSpeed = CONFIG.BASE_SPEED_PX_PER_FRAME;
             recalcPhysics();
             
-            // Обновляем размеры фоновых объектов
-            for (let obj of bgObjectsList) {
-                if (obj.updateSize) obj.updateSize();
-            }
+            for (const obj of bgObjectsList) obj.updateSize();
+            for (const obs of obstacles) obs.size = obstacleSize;
         }
         
-        // ========== ЗАГРУЗКА ФОНОВЫХ ОБЪЕКТОВ ==========
-        function loadBackgroundObjects() {
-            if (!CONFIG.BACKGROUND_OBJECTS.ENABLED) {
-                bgObjectsReady = true;
-                return;
-            }
-            
-            for (let i = 0; i < BG_OBJECTS_CONFIG.length; i++) {
-                const config = BG_OBJECTS_CONFIG[i];
-                
-                if (config.type === "static") {
-                    const img = new Image();
-                    img.onload = () => {
-                        imageLoaded();
-                        console.log(`✅ Загружен: ${config.name}`);
-                    };
-                    img.onerror = () => {
-                        console.warn(`⚠️ Не загружен: ${config.name}`);
-                        imageLoaded();
-                    };
-                    img.src = config.image;
-                    
-                    bgObjectsData.push({
-                        type: "static",
-                        image: img,
-                        config: config
-                    });
-                    
-                } else if (config.type === "animated") {
-                    const frames = [];
-                    let loadedFrames = 0;
-                    
-                    for (let f = 0; f < config.frames.length; f++) {
-                        const frameImg = new Image();
-                        frameImg.onload = () => {
-                            loadedFrames++;
-                            imageLoaded();
-                            if (loadedFrames === config.frames.length) {
-                                console.log(`✅ Загружен анимированный: ${config.name}`);
-                            }
-                        };
-                        frameImg.onerror = () => {
-                            loadedFrames++;
-                            imageLoaded();
-                        };
-                        frameImg.src = config.frames[f];
-                        frames.push(frameImg);
-                    }
-                    
-                    bgObjectsData.push({
-                        type: "animated",
-                        frames: frames,
-                        config: config,
-                        currentFrame: 0,
-                        frameCounter: 0
-                    });
-                }
-            }
-        }
-        
-        // ========== ЗАГРУЗКА ОСНОВНЫХ РЕСУРСОВ ==========
-        function imageLoaded() {
-            loadedCount++;
-            if (loadedCount >= totalToLoad) {
-                console.log("✅ Все ресурсы загружены!");
-                bgObjectsReady = true;
-            }
-        }
-        
-        for (let i = 0; i < RUN_FRAMES.length; i++) {
-            let img = new Image();
-            img.onload = imageLoaded;
-            img.onerror = () => imageLoaded();
-            img.src = RUN_FRAMES[i];
-            runImages.push(img);
-        }
-        
-        jumpImage = new Image();
-        jumpImage.onload = imageLoaded;
-        jumpImage.onerror = () => imageLoaded();
-        jumpImage.src = JUMP_SPRITE;
-        
-        ribImage = new Image();
-        ribImage.onload = imageLoaded;
-        ribImage.onerror = () => imageLoaded();
-        ribImage.src = RIB_SPRITE;
-        
-        parisBackground.onload = () => { backgroundLoaded = true; imageLoaded(); };
-        parisBackground.onerror = () => { backgroundLoaded = false; imageLoaded(); };
-        parisBackground.src = PARIS_BG_IMAGE;
-        
-        grassTexture = new Image();
-        grassTexture.onload = () => { grassTextureLoaded = true; imageLoaded(); };
-        grassTexture.onerror = () => { grassTextureLoaded = false; imageLoaded(); };
-        grassTexture.src = GRASS_TEXTURE_IMAGE;
-        
-        loadBackgroundObjects();
-        
-        // ========== ФОНОВЫЕ ОБЪЕКТЫ (класс) ==========
         class BackgroundObject {
             constructor(xPos, objectData) {
                 this.x = xPos;
@@ -439,165 +404,115 @@
                 this.height = 0;
                 this.updateSize();
             }
-            
             updateSize() {
-                let imgToUse = null;
-                if (this.objectData.type === "static") {
-                    imgToUse = this.objectData.image;
-                } else if (this.objectData.type === "animated") {
-                    if (this.objectData.frames.length > 0) {
-                        imgToUse = this.objectData.frames[0];
-                    }
-                }
-                if (!imgToUse || !imgToUse.complete || imgToUse.naturalWidth === 0) return;
-                
-                const baseSize = screenHeight * (this.objectData.config.sizePercent / 100);
-                const aspectRatio = imgToUse.naturalWidth / imgToUse.naturalHeight;
-                this.height = baseSize;
-                this.width = this.height * aspectRatio;
+                const img = this.objectData.type === "static"
+                    ? this.objectData.image : this.objectData.frames[0];
+                if (!img || !img.complete || img.naturalWidth === 0) return;
+                const base = screenHeight * (this.objectData.config.sizePercent / 100);
+                this.height = base;
+                this.width = base * (img.naturalWidth / img.naturalHeight);
             }
-            
             getCurrentImage() {
-                if (this.objectData.type === "static") {
-                    return this.objectData.image;
-                } else if (this.objectData.type === "animated") {
-                    return this.objectData.frames[this.objectData.currentFrame];
-                }
-                return null;
+                return this.objectData.type === "static"
+                    ? this.objectData.image : this.objectData.frames[this.objectData.currentFrame];
             }
-            
-            updateAnimation() {
+            updateAnimation(dt) {
                 if (this.objectData.type !== "animated") return;
-                const animData = this.objectData;
-                animData.frameCounter++;
-                if (animData.frameCounter >= animData.config.frameDelay) {
-                    animData.frameCounter = 0;
-                    animData.currentFrame = (animData.currentFrame + 1) % animData.frames.length;
+                const d = this.objectData;
+                // Анимация ускоряется вместе со скоростью
+                const animScale = Math.max(0.5, currentSpeed / CONFIG.BASE_SPEED_PX_PER_SEC);
+                const ft = ((d.config.frameDelay || 2) / 60) / animScale;
+                d.frameTimer += dt;
+                while (d.frameTimer >= ft) {
+                    d.frameTimer -= ft;
+                    d.currentFrame = (d.currentFrame + 1) % d.frames.length;
                 }
             }
-            
             draw() {
-                const imgToDraw = this.getCurrentImage();
-                if (!imgToDraw || !imgToDraw.complete || imgToDraw.naturalWidth === 0) return;
+                const img = this.getCurrentImage();
+                if (!img || !img.complete || img.naturalWidth === 0) return;
                 if (this.width === 0) this.updateSize();
-                
-                const sinkOffset = this.height * (this.objectData.config.sinkPercent / 100);
-                const y = groundY - this.height + sinkOffset;
-                ctx.drawImage(imgToDraw, this.x, y, this.width, this.height);
+                const sink = this.height * (this.objectData.config.sinkPercent / 100);
+                const y = groundY - this.height + sink;
+                ctx.drawImage(img, this.x, y, this.width, this.height);
             }
-            
-            update() {
-                this.updateAnimation();
-                this.x -= currentSpeed * this.objectData.config.speedMult;
+            update(dt) {
+                this.updateAnimation(dt);
+                this.x -= currentSpeed * this.objectData.config.speedMult * dt;
             }
-            
-            isOffscreen() {
-                return this.x + this.width < 0;
-            }
+            isOffscreen() { return this.x + this.width < 0; }
         }
         
-        function spawnBackgroundObject() {
-            if (!CONFIG.BACKGROUND_OBJECTS.ENABLED) return;
-            if (!bgObjectsReady) return;
+        function spawnBackgroundObject(dt) {
+            if (!CONFIG.BACKGROUND_OBJECTS.ENABLED || !bgObjectsReady) return;
             if (bgObjectsData.length === 0) return;
             if (bgObjectsList.length >= CONFIG.BACKGROUND_OBJECTS.MAX_OBJECTS) return;
             
             let lastX = -1000;
-            for (let obj of bgObjectsList) {
-                if (obj.x > lastX) lastX = obj.x;
-            }
+            for (const o of bgObjectsList) if (o.x > lastX) lastX = o.x;
             if (lastX + CONFIG.BACKGROUND_OBJECTS.MIN_DISTANCE > screenWidth) return;
-            if (Math.random() > CONFIG.BACKGROUND_OBJECTS.SPAWN_CHANCE) return;
             
-            let totalWeight = 0;
-            for (let obj of bgObjectsData) {
-                totalWeight += obj.config.spawnWeight;
+            const probPerSec = CONFIG.BACKGROUND_OBJECTS.SPAWN_CHANCE_PER_FRAME * 60;
+            if (Math.random() > Math.min(1, probPerSec * dt)) return;
+            
+            let totalW = 0;
+            for (const o of bgObjectsData) totalW += o.config.spawnWeight;
+            let r = Math.random() * totalW;
+            let sel = bgObjectsData[0];
+            for (const o of bgObjectsData) {
+                r -= o.config.spawnWeight;
+                if (r <= 0) { sel = o; break; }
             }
-            
-            let random = Math.random() * totalWeight;
-            let selectedObject = null;
-            for (let obj of bgObjectsData) {
-                random -= obj.config.spawnWeight;
-                if (random <= 0) {
-                    selectedObject = obj;
-                    break;
-                }
-            }
-            if (!selectedObject) selectedObject = bgObjectsData[0];
-            
-            const newObj = new BackgroundObject(screenWidth + Math.random() * 150, selectedObject);
-            bgObjectsList.push(newObj);
-            console.log(`🌿 Появился: ${selectedObject.config.name}`);
+            bgObjectsList.push(new BackgroundObject(screenWidth + Math.random() * 150, sel));
         }
         
-        function updateBackgroundObjects() {
+        function updateBackgroundObjects(dt) {
             for (let i = 0; i < bgObjectsList.length; i++) {
-                bgObjectsList[i].update();
-                if (bgObjectsList[i].isOffscreen()) {
-                    bgObjectsList.splice(i, 1);
-                    i--;
-                }
+                bgObjectsList[i].update(dt);
+                if (bgObjectsList[i].isOffscreen()) { bgObjectsList.splice(i, 1); i--; }
             }
-            if (gameStarted && gameRunning && CONFIG.BACKGROUND_OBJECTS.ENABLED) {
-                spawnBackgroundObject();
-            }
+            if (gameStarted && gameRunning) spawnBackgroundObject(dt);
         }
         
         function drawBackgroundObjects() {
-            for (let obj of bgObjectsList) {
-                obj.draw();
-            }
+            for (const o of bgObjectsList) o.draw();
         }
         
-        // ========== ЗВУКИ ==========
         function createAudio(url, loop = false, volume = 0.5) {
             if (!url) return null;
-            try {
-                const audio = new Audio();
-                audio.src = url;
-                audio.loop = loop;
-                audio.volume = volume;
-                return audio;
-            } catch(e) { return null; }
+            try { const a = new Audio(); a.src = url; a.loop = loop; a.volume = volume; return a; }
+            catch (e) { return null; }
         }
-        
         function playRandomJumpSound() {
             if (!soundEnabled || !gameStarted) return;
-            const sound = jumpSounds[Math.floor(Math.random() * jumpSounds.length)];
-            if (sound) { sound.currentTime = 0; sound.play().catch(e => {}); }
+            const s = jumpSounds[Math.floor(Math.random() * jumpSounds.length)];
+            if (s) { s.currentTime = 0; s.play().catch(() => {}); }
         }
-        
         function playRandomDeathSound() {
             if (!soundEnabled) return;
-            const sound = deathSounds[Math.floor(Math.random() * deathSounds.length)];
-            if (sound) { sound.currentTime = 0; sound.play().catch(e => {}); }
+            const s = deathSounds[Math.floor(Math.random() * deathSounds.length)];
+            if (s) { s.currentTime = 0; s.play().catch(() => {}); }
         }
-        
         function startMusic() {
-            if (bgMusic && musicEnabled && soundEnabled && gameStarted && gameRunning) {
-                bgMusic.play().catch(e => {});
-            }
+            if (bgMusic && musicEnabled && soundEnabled && gameStarted && gameRunning)
+                bgMusic.play().catch(() => {});
         }
-        
         function stopMusic() {
             if (bgMusic) { bgMusic.pause(); bgMusic.currentTime = 0; }
         }
-        
         function toggleMusic() {
             musicEnabled = !musicEnabled;
             if (musicEnabled && gameStarted && gameRunning) startMusic();
             else stopMusic();
         }
-        
         function initSounds() {
             bgMusic = createAudio(MUSIC_FILE, true, 0.3);
             recordSound = createAudio(RECORD_SOUND, false, 0.7);
-            JUMP_SOUNDS.forEach(s => { let a = createAudio(s, false, 0.5); if(a) jumpSounds.push(a); });
-            DEATH_SOUNDS.forEach(s => { let a = createAudio(s, false, 0.6); if(a) deathSounds.push(a); });
+            JUMP_SOUNDS.forEach(s => { const a = createAudio(s, false, 0.5); if (a) jumpSounds.push(a); });
+            DEATH_SOUNDS.forEach(s => { const a = createAudio(s, false, 0.6); if (a) deathSounds.push(a); });
         }
         
-        // ========== ОТРИСОВКА ==========
-        function drawHitbox(x, y, w, h, color = "rgba(255, 0, 0, 0.4)") {
+        function drawHitbox(x, y, w, h, color = "rgba(255,0,0,0.4)") {
             if (!showHitboxes) return;
             ctx.fillStyle = color;
             ctx.fillRect(x, y, w, h);
@@ -610,61 +525,194 @@
                 this.passed = false;
             }
             draw() {
-                if (ribImage.complete && ribImage.naturalWidth > 0) {
-                    ctx.drawImage(ribImage, this.x, groundY - this.size, this.size, this.size);
+                const y = groundY - this.size + obstacleYOffset;
+                if (ribImage && ribImage.complete && ribImage.naturalWidth > 0) {
+                    ctx.drawImage(ribImage, this.x, y, this.size, this.size);
                 } else {
                     ctx.fillStyle = "#ffaa66";
-                    ctx.fillRect(this.x, groundY - this.size, this.size, this.size);
+                    ctx.fillRect(this.x, y, this.size, this.size);
                 }
+                const hb = this.getHitboxRect();
+                drawHitbox(hb.x, hb.y, hb.w, hb.h, "rgba(0,255,0,0.45)");
             }
-            update() { this.x -= currentSpeed; }
+            update(dt) { this.x -= currentSpeed * dt; }
             getHitboxRect() {
                 return {
                     x: this.x + obstacleHitboxX,
-                    y: groundY - obstacleHitboxH + obstacleHitboxY,
+                    y: groundY - obstacleHitboxH + obstacleHitboxY + obstacleYOffset,
                     w: obstacleHitboxW,
                     h: obstacleHitboxH
                 };
             }
         }
         
-        function spawnObstacle() {
-            const dynamicGap = Math.max(220, Math.min(420, 360 - currentSpeed * 5));
-            if (obstacles.length === 0) {
-                obstacles.push(new Ribs(screenWidth));
-            } else {
-                const last = obstacles[obstacles.length-1];
-                if (last.x < screenWidth - dynamicGap) {
-                    obstacles.push(new Ribs(screenWidth));
+        class Fragment {
+            constructor(x, y, vx, vy, size) {
+                this.x = x; this.y = y;
+                this.vx = vx; this.vy = vy;
+                this.size = size;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 12;
+                this.life = CONFIG.FRAGMENT_LIFE;
+            }
+            update(dt) {
+                this.x += this.vx * dt;
+                this.y += this.vy * dt;
+                this.vy += CONFIG.FRAGMENT_GRAVITY * dt;
+                this.vx *= (1 - 0.5 * dt);
+                this.rotation += this.rotSpeed * dt;
+                this.life -= dt;
+            }
+            draw() {
+                if (this.life <= 0) return;
+                const alpha = Math.min(1, this.life / 0.4);
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                
+                let img = null;
+                if (fragmentLoaded && fragmentImage && fragmentImage.complete
+                    && fragmentImage.naturalWidth > 0) {
+                    img = fragmentImage;
+                } else if (brokenLoaded && brokenObstacleImage && brokenObstacleImage.complete
+                           && brokenObstacleImage.naturalWidth > 0) {
+                    img = brokenObstacleImage;
+                } else if (ribImage && ribImage.complete && ribImage.naturalWidth > 0) {
+                    img = ribImage;
                 }
+                
+                if (img) {
+                    ctx.drawImage(img, -this.size/2, -this.size/2, this.size, this.size);
+                } else {
+                    ctx.fillStyle = "#ff00ff";
+                    ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+                }
+                ctx.restore();
+            }
+            isDead() { return this.life <= 0; }
+        }
+        
+        class BreakingObstacle {
+            constructor(x, y, size, lifeSeconds) {
+                this.x = x;
+                this.y = y;
+                this.size = size;
+                this.timer = lifeSeconds;
+            }
+            update(dt) { this.timer -= dt; }
+            draw() {
+                if (this.timer <= 0) return;
+                
+                let img = null;
+                let tintRed = false;
+                if (brokenLoaded && brokenObstacleImage && brokenObstacleImage.complete
+                    && brokenObstacleImage.naturalWidth > 0) {
+                    img = brokenObstacleImage;
+                } else if (ribImage && ribImage.complete && ribImage.naturalWidth > 0) {
+                    img = ribImage;
+                    tintRed = true;
+                }
+                
+                if (img) {
+                    ctx.drawImage(img, this.x, this.y, this.size, this.size);
+                    if (tintRed) {
+                        ctx.globalAlpha = 0.55;
+                        ctx.fillStyle = "#ff2200";
+                        ctx.fillRect(this.x, this.y, this.size, this.size);
+                        ctx.globalAlpha = 1;
+                    }
+                } else {
+                    ctx.fillStyle = "#ff00ff";
+                    ctx.fillRect(this.x, this.y, this.size, this.size);
+                    ctx.fillStyle = "#fff";
+                    ctx.font = `bold ${Math.floor(this.size * 0.15)}px monospace`;
+                    ctx.textAlign = "center";
+                    ctx.fillText("NO", this.x + this.size/2, this.y + this.size/2 - 2);
+                    ctx.fillText("IMG", this.x + this.size/2, this.y + this.size/2 + this.size*0.18);
+                    ctx.textAlign = "left";
+                }
+            }
+            isDead() { return this.timer <= 0; }
+        }
+        
+        function breakObstacle(obs) {
+            const obsY = groundY - obs.size + obstacleYOffset;
+            breakingObstacles.push(
+                new BreakingObstacle(obs.x, obsY, obs.size, CONFIG.DEATH_DELAY_SECONDS)
+            );
+            
+            const cx = obs.x + obs.size / 2;
+            const cy = obsY + obs.size / 2;
+            const fragSize = obs.size * 0.22;
+            
+            for (let i = 0; i < CONFIG.FRAGMENT_COUNT; i++) {
+                const angle = (Math.PI * 2 * i) / CONFIG.FRAGMENT_COUNT + (Math.random() - 0.5) * 0.7;
+                const speed = 350 + Math.random() * 450;
+                fragments.push(new Fragment(
+                    cx + (Math.random() - 0.5) * obs.size * 0.4,
+                    cy + (Math.random() - 0.5) * obs.size * 0.4,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed - 250,
+                    fragSize * (0.7 + Math.random() * 0.8)
+                ));
             }
         }
         
-        function checkCollision() {
-            const playerBox = {
-                x: playerX + hitboxX,
-                y: playerYBase + yPos + hitboxY,
-                w: hitboxW,
-                h: hitboxH
-            };
-            for(let obs of obstacles) {
-                const obsBox = obs.getHitboxRect();
-                if (playerBox.x < obsBox.x + obsBox.w &&
-                    playerBox.x + playerBox.w > obsBox.x &&
-                    playerBox.y < obsBox.y + obsBox.h &&
-                    playerBox.y + playerBox.h > obsBox.y) return true;
+        function spawnObstacle() {
+            const timeGapPx = currentSpeed * CONFIG.OBSTACLE_MIN_TIME_GAP_SEC;
+            const dynamicGap = Math.max(CONFIG.OBSTACLE_MIN_GAP_PX, timeGapPx);
+            
+            if (obstacles.length === 0) {
+                obstacles.push(new Ribs(screenWidth));
+            } else {
+                const last = obstacles[obstacles.length - 1];
+                if (last.x < screenWidth - dynamicGap) obstacles.push(new Ribs(screenWidth));
             }
-            return false;
+        }
+        
+        function checkCollisionHit() {
+            const px = playerX + hitboxX;
+            const py = playerYBase + yPos + hitboxY;
+            for (const obs of obstacles) {
+                const o = obs.getHitboxRect();
+                if (px < o.x + o.w && px + hitboxW > o.x &&
+                    py < o.y + o.h && py + hitboxH > o.y) {
+                    return obs;
+                }
+            }
+            return null;
+        }
+        
+        function updateEffects(dt) {
+            for (let i = fragments.length - 1; i >= 0; i--) {
+                fragments[i].update(dt);
+                if (fragments[i].isDead()) { fragments.splice(i, 1); }
+            }
+            for (let i = breakingObstacles.length - 1; i >= 0; i--) {
+                breakingObstacles[i].update(dt);
+                if (breakingObstacles[i].isDead()) { breakingObstacles.splice(i, 1); }
+            }
+            if (!gameRunning && deathTimer > 0) deathTimer -= dt;
+            if (showRecordNotification && !gameRunning && deathTimer <= 0) {
+                recordNotificationTimer -= dt;
+                if (recordNotificationTimer <= 0) showRecordNotification = false;
+            }
+        }
+        
+        function drawEffects() {
+            for (const b of breakingObstacles) b.draw();
+            for (const f of fragments) f.draw();
         }
         
         function drawParisBackground() {
             if (backgroundLoaded && parisBackground.complete && parisBackground.naturalWidth > 0) {
                 ctx.drawImage(parisBackground, 0, 0, screenWidth, groundY);
             } else {
-                const grad = ctx.createLinearGradient(0, 0, 0, groundY);
-                grad.addColorStop(0, "#87CEEB");
-                grad.addColorStop(1, "#B0E0FF");
-                ctx.fillStyle = grad;
+                const g = ctx.createLinearGradient(0, 0, 0, groundY);
+                g.addColorStop(0, "#87CEEB");
+                g.addColorStop(1, "#B0E0FF");
+                ctx.fillStyle = g;
                 ctx.fillRect(0, 0, screenWidth, groundY);
             }
         }
@@ -672,13 +720,10 @@
         function drawGrass() {
             if (grassTextureLoaded && grassTexture && grassTexture.complete) {
                 const startY = groundY - 5;
-                for(let y = 0; y < screenHeight - startY + grassHeight; y += grassHeight) {
-                    for(let x = -grassWidth; x <= screenWidth + grassWidth; x += grassWidth) {
+                for (let y = 0; y < screenHeight - startY + grassHeight; y += grassHeight) {
+                    for (let x = -grassWidth; x <= screenWidth + grassWidth; x += grassWidth) {
                         ctx.drawImage(grassTexture, x + textureOffset, startY + y, grassWidth, grassHeight);
                     }
-                }
-                if (gameRunning) {
-                    textureOffset = (textureOffset - currentSpeed * CONFIG.GRASS_SPEED_MULT) % grassWidth;
                 }
             } else {
                 ctx.fillStyle = "#2d6a2d";
@@ -689,37 +734,49 @@
         function drawPlayer() {
             const x = playerX;
             const y = playerYBase + yPos;
-            
-            let imgToDraw = null;
-            if (isJumping) imgToDraw = jumpImage;
-            else if (runImages.length && runImages[currentRunFrame]?.complete) imgToDraw = runImages[currentRunFrame];
+            let img = null;
+            if (isJumping) img = jumpImage;
+            else if (runImages.length && runImages[currentRunFrame]?.complete) img = runImages[currentRunFrame];
             
             ctx.fillStyle = "rgba(0,0,0,0.3)";
             ctx.beginPath();
-            ctx.ellipse(x + playerWidth/2, playerYBase + yPos + playerHeight - 6, playerWidth/2.2, playerHeight/12, 0, 0, Math.PI*2);
+            ctx.ellipse(x + playerWidth/2, playerYBase + yPos + playerHeight - 6,
+                playerWidth/2.2, playerHeight/12, 0, 0, Math.PI*2);
             ctx.fill();
             
-            if (imgToDraw && imgToDraw.complete && imgToDraw.naturalWidth > 0) {
-                ctx.drawImage(imgToDraw, x, y, playerWidth, playerHeight);
+            if (img && img.complete && img.naturalWidth > 0) {
+                ctx.drawImage(img, x, y, playerWidth, playerHeight);
             } else {
                 ctx.fillStyle = "#ffcc88";
                 ctx.fillRect(x, y, playerWidth, playerHeight);
             }
+            drawHitbox(x + hitboxX, y + hitboxY, hitboxW, hitboxH, "rgba(255,0,0,0.45)");
         }
         
         function drawUI() {
             const margin = 8;
             const panelH = uiFontSize * 2.2;
             
+            // Левый верхний — СЧЁТ + скорость
             ctx.fillStyle = "rgba(0,0,0,0.6)";
             ctx.fillRect(margin, margin, uiPanelWidth, panelH);
             ctx.fillStyle = "#ffd966";
             ctx.font = `bold ${uiFontSize - 2}px monospace`;
             ctx.fillText("СЧЁТ", margin + 6, margin + uiFontSize);
+            
             ctx.fillStyle = "#fff";
             ctx.font = `bold ${uiFontSize + 2}px monospace`;
-            ctx.fillText(Math.floor(score), margin + 6, margin + uiFontSize * 1.7);
+            const scoreText = String(Math.floor(score));
+            ctx.fillText(scoreText, margin + 6, margin + uiFontSize * 1.7);
             
+            // Индикатор скорости рядом со счётом
+            const scoreWidth = ctx.measureText(scoreText).width;
+            const speedMult = currentSpeed / CONFIG.BASE_SPEED_PX_PER_SEC;
+            ctx.fillStyle = "#ff9966";
+            ctx.font = `bold ${uiFontSize - 3}px monospace`;
+            ctx.fillText(`x${speedMult.toFixed(1)}`, margin + 6 + scoreWidth + 8, margin + uiFontSize * 1.7);
+            
+            // Правый верхний — РЕКОРД
             ctx.fillStyle = "rgba(0,0,0,0.6)";
             ctx.fillRect(screenWidth - uiPanelWidth - margin, margin, uiPanelWidth, panelH);
             ctx.fillStyle = "#ffd966";
@@ -729,6 +786,7 @@
             ctx.font = `bold ${uiFontSize + 2}px monospace`;
             ctx.fillText(highScore, screenWidth - uiPanelWidth - margin + 6, margin + uiFontSize * 1.7);
             
+            // Музыка
             const musicW = uiFontSize * 2.8;
             const musicH = uiFontSize * 1.4;
             const musicX = screenWidth - musicW - margin;
@@ -750,25 +808,25 @@
             const tw = ctx.measureText(goText).width;
             ctx.fillText(goText, screenWidth/2 - tw/2, screenHeight/2 - 60);
             
-            if(showRecordNotification && recordNotificationTimer > 0) {
-                let currentOpacity = Math.min(1, recordNotificationTimer / 30);
-                const notifWidth = screenWidth * 0.7;
-                const notifHeight = gameOverFontSize * 1.2;
-                const notifX = (screenWidth - notifWidth) / 2;
+            if (showRecordNotification && recordNotificationTimer > 0) {
+                const opacity = Math.min(1, recordNotificationTimer / 0.5);
+                const notifW = screenWidth * 0.7;
+                const notifH = gameOverFontSize * 1.2;
+                const notifX = (screenWidth - notifW) / 2;
                 const notifY = 20;
-                ctx.globalAlpha = currentOpacity * 0.95;
+                ctx.globalAlpha = opacity * 0.95;
                 ctx.fillStyle = "#1a1a2e";
-                ctx.fillRect(notifX, notifY, notifWidth, notifHeight);
+                ctx.fillRect(notifX, notifY, notifW, notifH);
                 ctx.fillStyle = "#ffd700";
-                ctx.fillRect(notifX, notifY, notifWidth, 3);
-                ctx.globalAlpha = currentOpacity;
+                ctx.fillRect(notifX, notifY, notifW, 3);
+                ctx.globalAlpha = opacity;
                 ctx.font = `bold ${gameOverFontSize * 0.55}px monospace`;
                 ctx.fillStyle = "#ffd700";
-                ctx.fillText("🏆", notifX + 15, notifY + notifHeight - 12);
+                ctx.fillText("🏆", notifX + 15, notifY + notifH - 12);
                 ctx.fillStyle = "#ffffff";
-                const recordText = `НОВЫЙ РЕКОРД! ${Math.floor(highScore)} очков`;
-                const textWidth = ctx.measureText(recordText).width;
-                ctx.fillText(recordText, notifX + (notifWidth - textWidth) / 2, notifY + notifHeight - 12);
+                const t = `НОВЫЙ РЕКОРД! ${Math.floor(highScore)} очков`;
+                const w = ctx.measureText(t).width;
+                ctx.fillText(t, notifX + (notifW - w) / 2, notifY + notifH - 12);
                 ctx.globalAlpha = 1;
             }
             
@@ -778,147 +836,159 @@
             ctx.fillRect(btnX, btnY, gameOverBtnW, gameOverBtnH);
             ctx.fillStyle = "#fff";
             ctx.font = `bold ${gameOverFontSize - 6}px monospace`;
-            const btnText = "▶ НОВАЯ ИГРА";
-            const btnTw = ctx.measureText(btnText).width;
-            ctx.fillText(btnText, screenWidth/2 - btnTw/2, btnY + gameOverBtnH - 10);
+            const txt = "▶ НОВАЯ ИГРА";
+            const btw = ctx.measureText(txt).width;
+            ctx.fillText(txt, screenWidth/2 - btw/2, btnY + gameOverBtnH - 10);
         }
         
         function drawStartScreen() {
             ctx.fillStyle = "rgba(0,0,0,0.88)";
             ctx.fillRect(0, 0, screenWidth, screenHeight);
             
-            const titleSize = Math.max(20, Math.floor(screenWidth / 26));
-            ctx.font = `bold ${titleSize}px monospace`;
+            const ts = Math.max(20, Math.floor(screenWidth / 26));
+            ctx.font = `bold ${ts}px monospace`;
             ctx.fillStyle = "#ffaa66";
             const title = "👉 НАЖМИТЕ, ЧТОБЫ НАЧАТЬ 👈";
             const tw = ctx.measureText(title).width;
             ctx.fillText(title, screenWidth/2 - tw/2, screenHeight/2 - 40);
             
-            ctx.font = `${titleSize - 6}px monospace`;
+            ctx.font = `${ts - 6}px monospace`;
             ctx.fillStyle = "#ccc";
-            const subtitle = "Legends Of Manzan";
-            const sw = ctx.measureText(subtitle).width;
-            ctx.fillText(subtitle, screenWidth/2 - sw/2, screenHeight/2 + 20);
+            const sub = "Legends Of Manzan";
+            const sw = ctx.measureText(sub).width;
+            ctx.fillText(sub, screenWidth/2 - sw/2, screenHeight/2 + 20);
         }
         
         function draw() {
-            if (!gameStarted) {
-                drawStartScreen();
-                return;
-            }
+            if (!gameStarted) { drawStartScreen(); return; }
             drawParisBackground();
             drawGrass();
             drawBackgroundObjects();
-            for(let obs of obstacles) obs.draw();
+            for (const obs of obstacles) obs.draw();
+            drawEffects();
             drawPlayer();
             drawUI();
-            if(!gameRunning) drawGameOver();
+            if (!gameRunning && deathTimer <= 0) drawGameOver();
         }
         
-        // ========== ЛОГИКА ИГРЫ ==========
-        function updateGame() {
-            if(!gameStarted || !gameRunning) return;
+        function updateGame(dt) {
+            if (!gameStarted) return;
             
-            if(pendingJump && !isJumping && yPos === 0) {
+            updateEffects(dt);
+            
+            if (!gameRunning) return;
+            
+            if (pendingJump && !isJumping && yPos >= 0) {
                 isJumping = true;
                 yVelocity = -jumpVelocity;
                 playRandomJumpSound();
             }
             pendingJump = false;
             
-            if(isJumping) {
-                yPos += yVelocity;
-                yVelocity += gravity;
-                if(yPos >= 0) {
-                    yPos = 0;
-                    isJumping = false;
-                    yVelocity = 0;
-                }
+            if (isJumping) {
+                yPos += yVelocity * dt;
+                yVelocity += CONFIG.GRAVITY_PX_PER_SEC2 * dt;
+                if (yPos >= 0) { yPos = 0; isJumping = false; yVelocity = 0; }
             }
             
-            if(!isJumping && gameRunning && runImages.length) {
-                frameCounter++;
-                if(frameCounter > 5) {
-                    frameCounter = 0;
+            // Анимация бега — ускоряется с currentSpeed
+            if (!isJumping && runImages.length > 0) {
+                const animScale = Math.max(0.5, currentSpeed / CONFIG.BASE_SPEED_PX_PER_SEC);
+                const frameTime = RUN_ANIM_FRAME_TIME / animScale;
+                runAnimTimer += dt;
+                while (runAnimTimer >= frameTime) {
+                    runAnimTimer -= frameTime;
                     currentRunFrame = (currentRunFrame + 1) % runImages.length;
                 }
             }
             
-            for(let i=0; i<obstacles.length; i++) {
+            for (let i = 0; i < obstacles.length; i++) {
                 const obs = obstacles[i];
-                obs.update();
-                if(obs.x + obs.size < 0) {
-                    obstacles.splice(i,1);
-                    i--;
-                    score += 15;
+                obs.update(dt);
+                if (obs.x + obs.size < 0) {
+                    obstacles.splice(i, 1); i--;
+                    score += CONFIG.SCORE_PER_OBSTACLE;
                     continue;
                 }
-                if(!obs.passed && obs.x + obs.size/2 < playerX) {
+                if (!obs.passed && obs.x + obs.size/2 < playerX) {
                     obs.passed = true;
-                    score += 10;
+                    score += CONFIG.SCORE_PER_OBSTACLE_PASS;
                 }
             }
             
-            const targetSpeed = CONFIG.BASE_SPEED_PX_PER_FRAME + Math.floor(score / CONFIG.SCORE_SPEED_INCREASE);
-            let newSpeed = targetSpeed;
-            if(newSpeed > CONFIG.MAX_SPEED_PX_PER_FRAME) newSpeed = CONFIG.MAX_SPEED_PX_PER_FRAME;
-            if(currentSpeed < newSpeed) currentSpeed += 0.05;
+            // Скорость — level-up каждые 100 очков, +60 px/s за уровень
+            const speedLevel = Math.floor(score / CONFIG.SCORE_SPEED_INCREASE);
+            let target = CONFIG.BASE_SPEED_PX_PER_SEC + speedLevel * CONFIG.SPEED_PER_SCORE_LEVEL;
+            if (target > CONFIG.MAX_SPEED_PX_PER_SEC) target = CONFIG.MAX_SPEED_PX_PER_SEC;
+            if (currentSpeed < target) currentSpeed = Math.min(target, currentSpeed + CONFIG.SPEED_ACCEL_PX_PER_SEC2 * dt);
             
-            const spawnRate = Math.max(CONFIG.SPAWN_BASE_RATE, 130 - Math.floor(currentSpeed * 3));
-            if(frame % Math.floor(spawnRate) === 0 && obstacles.length < 3) {
-                if(Math.random() < 0.55) spawnObstacle();
+            // Спавн — оригинальная формула (редкий и постоянный)
+            const speedOld = currentSpeed / 60;
+            const spawnRateFrames = Math.max(CONFIG.SPAWN_BASE_RATE_FRAMES, 130 - Math.floor(speedOld * CONFIG.SPAWN_RATE_REDUCTION));
+            const spawnPerSec = (60 / spawnRateFrames) * CONFIG.SPAWN_CHANCE;
+            if (obstacles.length < CONFIG.OBSTACLE_MAX_ON_SCREEN
+                && Math.random() < Math.min(1, spawnPerSec * dt)) {
+                spawnObstacle();
             }
             
-            updateBackgroundObjects();
+            updateBackgroundObjects(dt);
             
-            if(checkCollision()) {
+            if (grassTextureLoaded) {
+                const dx = currentSpeed * CONFIG.GRASS_SPEED_MULT * dt;
+                textureOffset = ((textureOffset - dx) % grassWidth + grassWidth) % grassWidth;
+            }
+            
+            score += CONFIG.SCORE_PER_SECOND * dt;
+            
+            const hit = checkCollisionHit();
+            if (hit) {
                 gameRunning = false;
+                deathTimer = CONFIG.DEATH_DELAY_SECONDS;
                 playRandomDeathSound();
                 stopMusic();
                 
-                const currentHighScore = parseInt(localStorage.getItem('ribHighScore')) || 0;
-                if(Math.floor(score) > currentHighScore) {
+                obstacles = obstacles.filter(o => o !== hit);
+                breakObstacle(hit);
+                
+                const prev = parseInt(localStorage.getItem('ribHighScore')) || 0;
+                if (Math.floor(score) > prev) {
                     highScore = Math.floor(score);
                     localStorage.setItem('ribHighScore', highScore);
                     showRecordNotification = true;
-                    recordNotificationTimer = 90;
+                    recordNotificationTimer = RECORD_NOTIF_DURATION;
                     setTimeout(() => {
                         if (recordSound && soundEnabled && !gameRunning) {
                             recordSound.currentTime = 0;
-                            recordSound.play().catch(e => {});
+                            recordSound.play().catch(() => {});
                         }
                     }, 500);
                 }
-            }
-            
-            if(frame % 60 === 0 && gameRunning) score += 2;
-            frame++;
-            
-            if(showRecordNotification) {
-                recordNotificationTimer--;
-                if(recordNotificationTimer <= 0) showRecordNotification = false;
             }
         }
         
         function restartGame() {
             gameRunning = true;
+            deathTimer = 0;
             score = 0;
             obstacles = [];
             bgObjectsList = [];
+            fragments = [];
+            breakingObstacles = [];
             isJumping = false;
             yPos = 0;
             yVelocity = 0;
-            frame = 0;
             pendingJump = false;
+            runAnimTimer = 0;
+            currentRunFrame = 0;
             showRecordNotification = false;
-            currentSpeed = CONFIG.BASE_SPEED_PX_PER_FRAME;
+            recordNotificationTimer = 0;
+            currentSpeed = CONFIG.BASE_SPEED_PX_PER_SEC;
             if (gameStarted && musicEnabled && soundEnabled) startMusic();
         }
         
         function jump() {
-            if (!gameStarted) return;
-            if (!gameRunning) return;
-            if (!isJumping && yPos === 0) pendingJump = true;
+            if (!gameStarted || !gameRunning) return;
+            if (!isJumping && yPos >= 0) pendingJump = true;
         }
         
         function startGame() {
@@ -927,93 +997,81 @@
             restartGame();
         }
         
-        // ========== ОБРАБОТЧИКИ ==========
         function handleCanvasClick(e) {
             const rect = canvas.getBoundingClientRect();
-            const scaleX = screenWidth / rect.width;
-            const scaleY = screenHeight / rect.height;
-            
-            let clientX, clientY;
+            const sx = screenWidth / rect.width;
+            const sy = screenHeight / rect.height;
+            let cx, cy;
             if (e.touches) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-                e.preventDefault();
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
+                cx = e.touches[0].clientX; cy = e.touches[0].clientY; e.preventDefault();
+            } else { cx = e.clientX; cy = e.clientY; }
+            const x = (cx - rect.left) * sx;
+            const y = (cy - rect.top) * sy;
             
-            const canvasX = (clientX - rect.left) * scaleX;
-            const canvasY = (clientY - rect.top) * scaleY;
-            
-            if (gameStarted && !gameRunning) {
-                const btnX = screenWidth/2 - gameOverBtnW/2;
-                const btnY = screenHeight/2 + 40;
-                if (canvasX >= btnX && canvasX <= btnX + gameOverBtnW && canvasY >= btnY && canvasY <= btnY + gameOverBtnH) {
+            if (gameStarted && !gameRunning && deathTimer <= 0) {
+                const bx = screenWidth/2 - gameOverBtnW/2;
+                const by = screenHeight/2 + 40;
+                if (x >= bx && x <= bx + gameOverBtnW && y >= by && y <= by + gameOverBtnH) {
                     restartGame();
                     return;
                 }
             }
             
-            const margin = 8;
-            const panelH = uiFontSize * 2.2;
-            const musicW = uiFontSize * 2.8;
-            const musicH = uiFontSize * 1.4;
-            const musicX = screenWidth - musicW - margin;
-            const musicY = margin + panelH + 5;
-            
-            if (canvasX >= musicX && canvasX <= musicX + musicW && canvasY >= musicY && canvasY <= musicY + musicH) {
-                toggleMusic();
-                return;
+            // Только кнопка музыки кликабельна
+            if (gameStarted) {
+                const margin = 8;
+                const panelH = uiFontSize * 2.2;
+                const mw = uiFontSize * 2.8, mh = uiFontSize * 1.4;
+                const mx = screenWidth - mw - margin, my = margin + panelH + 5;
+                if (x >= mx && x <= mx + mw && y >= my && y <= my + mh) { toggleMusic(); return; }
             }
             
-            if (!gameStarted) {
-                requestFullscreen();
-                startGame();
-            } else if (gameRunning) {
-                jump();
-            }
+            if (!gameStarted) { requestFullscreen(); startGame(); }
+            else if (gameRunning) jump();
         }
         
         window.addEventListener('resize', () => {
-            setTimeout(resizeCanvas, 100);
+            clearTimeout(window._rt);
+            window._rt = setTimeout(resizeCanvas, 100);
         });
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
         
         canvas.addEventListener('click', handleCanvasClick);
-        canvas.addEventListener('touchstart', handleCanvasClick);
+        canvas.addEventListener('touchstart', handleCanvasClick, { passive: false });
         
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'o' || e.key === 'O') {
-                e.preventDefault();
-                showHitboxes = !showHitboxes;
-                return;
-            }
+            // Хитбоксы — только клавишей O
+            if (e.key === 'o' || e.key === 'O') { e.preventDefault(); showHitboxes = !showHitboxes; return; }
             if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'Space') {
                 e.preventDefault();
-                if (!gameStarted) {
-                    requestFullscreen();
-                    startGame();
-                } else if (gameRunning) {
-                    jump();
-                }
+                if (!gameStarted) { requestFullscreen(); startGame(); }
+                else if (gameRunning) jump();
             }
             if (e.key === 'r' || e.key === 'R') {
                 e.preventDefault();
-                if (!gameStarted) startGame();
-                else restartGame();
+                if (!gameStarted) startGame(); else restartGame();
             }
         });
         
-        // ========== ЗАПУСК ==========
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) lastTime = performance.now();
+        });
+        
         initSounds();
         resizeCanvas();
         
-        function gameLoop() {
-            updateGame();
+        let lastTime = performance.now();
+        
+        function gameLoop(now) {
+            let dt = (now - lastTime) / 1000;
+            lastTime = now;
+            if (!isFinite(dt) || dt < 0) dt = 0;
+            if (dt > MAX_DT) dt = MAX_DT;
+            updateGame(dt);
             draw();
             requestAnimationFrame(gameLoop);
         }
-        gameLoop();
+        requestAnimationFrame(gameLoop);
     })();
 </script>
 </body>
