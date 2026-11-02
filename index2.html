@@ -7,39 +7,582 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>LegendsOfManzan - С фоновыми объектами</title>
     <style>
-        * { user-select: none; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; box-sizing: border-box; }
+        /* ============================================================
+           База: canvas на весь экран, интерфейс — в DOM-слоях
+           ============================================================ */
+        * { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            width: 100%; height: 100%; background: #000000; overflow: hidden;
-        }
-        body {
-            margin: 0; padding: 0; overflow: hidden;
-            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            width: 100%; height: 100%; background: #0b0b10;
+            overflow: hidden; overscroll-behavior: none;
         }
         ::-webkit-scrollbar { display: none; }
-        canvas {
-            display: block; position: fixed; top: 0; left: 0;
-            width: 100%; height: 100%; cursor: pointer;
-            image-rendering: crisp-edges; image-rendering: -webkit-optimize-contrast;
+        canvas { image-rendering: auto; }
+
+        /* Скорость рядом со счётом */
+        .hud__speed {
+            margin-top: 3px;
+            font: 700 10px/1 ui-monospace, Menlo, Consolas, monospace;
+            font-style: normal;
+            letter-spacing: 0.02em;
+            color: #ff9b63;
+            font-variant-numeric: tabular-nums;
         }
+        @media (max-width: 430px) {
+            .hud__actions { gap: 4px; }
+            .icon-btn { width: 34px; height: 34px; font-size: 14px; }
+        }
+
+        /* На телефоне в портрете по-прежнему просим повернуть экран:
+           геймплей этого файла рассчитан на горизонталь. */
         @media (max-width: 768px) and (orientation: portrait) {
             body::before {
                 content: "📱 ПОВЕРНИТЕ ТЕЛЕФОН В ГОРИЗОНТАЛЬНОЕ ПОЛОЖЕНИЕ 📱";
-                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-                background: #000; color: #fff; display: flex; align-items: center; justify-content: center;
-                text-align: center; font-size: 1.2rem; padding: 20px; z-index: 9999;
-                font-family: monospace; backdrop-filter: blur(10px);
+                position: fixed; inset: 0;
+                background: #000; color: #fff;
+                display: flex; align-items: center; justify-content: center;
+                text-align: center; font: 700 1.05rem/1.5 ui-monospace, monospace;
+                padding: 24px; z-index: 9999;
             }
         }
+
+/* ============================================================
+   Legends of Manzan — оболочка интерфейса
+   Игра рисуется на canvas, UI — обычный DOM (доступность, зум).
+   ============================================================ */
+
+:root {
+    --gold: #ffce5c;
+    --orange: #ff7a2f;
+    --cream: #fff6e5;
+    --ink: #14100b;
+    --panel: rgba(16, 13, 10, 0.82);
+    --line: rgba(255, 255, 255, 0.12);
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+}
+
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: #0b0b10;
+    color: var(--cream);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+
+canvas {
+    position: fixed;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    cursor: pointer;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+/* ---------------- HUD ---------------- */
+
+.hud {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: calc(10px + var(--safe-t)) calc(10px + var(--safe-r)) 0 calc(10px + var(--safe-l));
+    pointer-events: none;
+}
+
+.hud__stat {
+    display: flex;
+    flex-direction: column;
+    min-width: 76px;
+    padding: 6px 12px 7px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(10, 9, 12, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.hud__stat--right {
+    align-items: flex-end;
+}
+
+.hud__stat span {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    color: var(--gold);
+    opacity: 0.9;
+}
+
+.hud__stat b {
+    font: 700 20px/1.15 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+}
+
+.hud__actions {
+    display: flex;
+    gap: 6px;
+    padding-top: 2px;
+    pointer-events: auto;
+}
+
+.icon-btn {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: rgba(10, 9, 12, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--cream);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.icon-btn:active {
+    transform: scale(0.9);
+}
+
+.icon-btn.is-off {
+    opacity: 0.5;
+}
+
+/* ---------------- Кнопка прыжка (тач) ---------------- */
+
+.jump-btn {
+    position: fixed;
+    right: calc(18px + var(--safe-r));
+    bottom: calc(18px + var(--safe-b));
+    z-index: 6;
+    width: 86px;
+    height: 86px;
+    display: none;
+    place-items: center;
+    border: 2px solid rgba(255, 206, 92, 0.55);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255, 206, 92, 0.28), rgba(10, 9, 12, 0.62));
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: var(--cream);
+    font: 800 11px/1 ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    touch-action: none;
+}
+
+.jump-btn:active {
+    transform: scale(0.94);
+    background: radial-gradient(circle at 35% 30%, rgba(255, 206, 92, 0.5), rgba(10, 9, 12, 0.7));
+}
+
+@media (pointer: coarse) {
+    .jump-btn {
+        display: grid;
+    }
+}
+
+/* ---------------- Экраны ---------------- */
+
+.screen {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: calc(16px + var(--safe-t)) calc(16px + var(--safe-r)) calc(16px + var(--safe-b)) calc(16px + var(--safe-l));
+    background: radial-gradient(130% 95% at 50% 0%, rgba(28, 16, 8, 0.28), rgba(5, 5, 8, 0.84));
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    overflow: hidden;
+}
+
+.card {
+    width: min(100%, 430px);
+    max-height: 100%;
+    padding: clamp(20px, 4.5vw, 32px);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    background: var(--panel);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    text-align: center;
+    animation: card-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+    overflow-y: auto;
+}
+
+.card--loader {
+    width: min(100%, 320px);
+}
+
+@keyframes card-in {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.brand {
+    margin: 0 0 14px;
+    font: 700 10px/1 ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--gold);
+    opacity: 0.85;
+}
+
+.title {
+    margin: 0 0 10px;
+    font-size: clamp(34px, 10vw, 54px);
+    line-height: 0.94;
+    font-weight: 900;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+}
+
+.title span {
+    color: var(--gold);
+    text-shadow: 0 0 34px rgba(255, 206, 92, 0.28);
+}
+
+.subtitle {
+    margin: 0 0 16px;
+    font-size: clamp(13px, 3.6vw, 15px);
+    line-height: 1.4;
+    color: rgba(255, 246, 229, 0.62);
+}
+
+.best-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 18px;
+    padding: 7px 15px;
+    border: 1px solid rgba(255, 206, 92, 0.28);
+    border-radius: 999px;
+    background: rgba(255, 206, 92, 0.09);
+    font-size: 13px;
+    color: rgba(255, 246, 229, 0.8);
+}
+
+.best-pill b {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--gold);
+}
+
+/* ---------------- Кнопки ---------------- */
+
+.btn {
+    display: block;
+    width: 100%;
+    min-height: 54px;
+    margin-top: 10px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 16px;
+    font: 800 16px/1 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.btn:active {
+    transform: scale(0.975);
+}
+
+.btn--primary {
+    color: #241405;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--orange) 100%);
+    box-shadow: 0 12px 30px rgba(255, 122, 47, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.btn--primary:hover {
+    filter: brightness(1.06);
+}
+
+.btn--ghost {
+    color: rgba(255, 246, 229, 0.7);
+    background: transparent;
+    border: 1px solid var(--line);
+    font-size: 14px;
+    min-height: 46px;
+}
+
+.btn--ghost:hover {
+    color: var(--cream);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.hint {
+    margin: 16px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255, 246, 229, 0.42);
+}
+
+/* ---------------- Статистика ---------------- */
+
+.stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 6px 0 18px;
+}
+
+.stats--single {
+    grid-template-columns: 1fr;
+}
+
+.stats > div {
+    padding: 12px 8px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.stats span {
+    display: block;
+    margin-bottom: 5px;
+    font: 700 9px/1 ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255, 246, 229, 0.45);
+}
+
+.stats b {
+    font: 800 clamp(26px, 8vw, 34px)/1 ui-monospace, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--gold);
+}
+
+.record {
+    display: inline-block;
+    margin: 0 0 16px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--gold), var(--orange));
+    color: #241405;
+    font: 800 12px/1 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.04em;
+    animation: record-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes record-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.045); }
+}
+
+/* ---------------- Загрузка ---------------- */
+
+.loader {
+    height: 8px;
+    margin: 4px 0 12px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.loader i {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--orange), var(--gold));
+    transition: width 0.2s ease;
+}
+
+.loader__pct {
+    margin: 0;
+    font: 700 12px/1 ui-monospace, Menlo, Consolas, monospace;
+    color: rgba(255, 246, 229, 0.5);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- Мелочи ---------------- */
+
+@media (max-height: 480px) {
+    .card {
+        padding: 16px 20px;
+        border-radius: 20px;
+    }
+    .brand {
+        margin-bottom: 8px;
+    }
+    .title {
+        font-size: clamp(26px, 7vh, 40px);
+        margin-bottom: 6px;
+    }
+    .subtitle {
+        margin-bottom: 10px;
+        font-size: 12px;
+    }
+    .best-pill {
+        margin-bottom: 10px;
+        padding: 5px 12px;
+    }
+    .btn {
+        min-height: 44px;
+    }
+    .hint {
+        margin-top: 10px;
+    }
+    .jump-btn {
+        width: 68px;
+        height: 68px;
+        font-size: 9px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}
+
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
 
+    <!-- HUD -->
+    <div class="hud" id="hud" hidden>
+        <div class="hud__stat">
+            <span>СЧЁТ</span>
+            <b id="scoreVal">0</b>
+            <i class="hud__speed" id="speedVal">x1.0</i>
+        </div>
+        <div class="hud__actions">
+            <button class="icon-btn" id="soundBtn" type="button" aria-label="Звук">🔊</button>
+            <button class="icon-btn" id="pauseBtn" type="button" aria-label="Пауза">⏸</button>
+            <button class="icon-btn" id="fsBtn" type="button" aria-label="Во весь экран">⛶</button>
+        </div>
+        <div class="hud__stat hud__stat--right">
+            <span>РЕКОРД</span>
+            <b id="bestVal">0</b>
+        </div>
+    </div>
+
+    <!-- Кнопка прыжка для тача -->
+    <button class="jump-btn" id="jumpBtn" type="button" aria-label="Прыжок"><span>ПРЫЖОК</span></button>
+
+    <!-- Загрузка -->
+    <div class="screen" id="loadingScreen">
+        <div class="card card--loader">
+            <p class="brand">LEGENDS OF MANZAN</p>
+            <div class="loader"><i id="loadBar"></i></div>
+            <p class="loader__pct" id="loadPct">0%</p>
+        </div>
+    </div>
+
+    <!-- Меню -->
+    <div class="screen" id="menuScreen" hidden>
+        <div class="card">
+            <p class="brand">LEGENDS OF MANZAN</p>
+            <h1 class="title">ЗА 5 МИНУТ<br><span>ДО ЭФИРА</span></h1>
+            <p class="subtitle">Париж. Один забор. Ноль шансов.</p>
+            <div class="best-pill">🏆 Рекорд <b id="menuBest">0</b></div>
+            <button class="btn btn--primary" id="playBtn" type="button">ИГРАТЬ</button>
+            <p class="hint">Пробел / ↑ / тап — прыжок · P — пауза</p>
+        </div>
+    </div>
+
+    <!-- Конец игры -->
+    <div class="screen" id="overScreen" hidden>
+        <div class="card">
+            <p class="brand">GAME OVER</p>
+            <div class="record" id="recordBadge" hidden>🏆 Новый рекорд</div>
+            <div class="stats">
+                <div><span>Счёт</span><b id="overScore">0</b></div>
+                <div><span>Рекорд</span><b id="overBest">0</b></div>
+            </div>
+            <button class="btn btn--primary" id="againBtn" type="button">ЕЩЁ РАЗ</button>
+            <button class="btn btn--ghost" id="menuBtn" type="button">В МЕНЮ</button>
+        </div>
+    </div>
+
+    <!-- Пауза -->
+    <div class="screen" id="pauseScreen" hidden>
+        <div class="card">
+            <p class="brand">ПАУЗА</p>
+            <div class="stats stats--single">
+                <div><span>Счёт</span><b id="pauseScore">0</b></div>
+            </div>
+            <button class="btn btn--primary" id="resumeBtn" type="button">ПРОДОЛЖИТЬ</button>
+            <button class="btn btn--ghost" id="pauseMenuBtn" type="button">В МЕНЮ</button>
+        </div>
+    </div>
+
 <script>
     (function(){
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        
+        const $ = (id) => document.getElementById(id);
+        const el = {
+            hud: $('hud'),
+            score: $('scoreVal'),
+            best: $('bestVal'),
+            speed: $('speedVal'),
+            sound: $('soundBtn'),
+            pause: $('pauseBtn'),
+            fs: $('fsBtn'),
+            jump: $('jumpBtn'),
+            loading: $('loadingScreen'),
+            loadBar: $('loadBar'),
+            loadPct: $('loadPct'),
+            menu: $('menuScreen'),
+            menuBest: $('menuBest'),
+            play: $('playBtn'),
+            over: $('overScreen'),
+            overScore: $('overScore'),
+            overBest: $('overBest'),
+            record: $('recordBadge'),
+            again: $('againBtn'),
+            menuBtn: $('menuBtn'),
+            pauseScreen: $('pauseScreen'),
+            pauseScore: $('pauseScore'),
+            resume: $('resumeBtn'),
+            pauseMenu: $('pauseMenuBtn'),
+        };
         
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
@@ -172,8 +715,20 @@
         
         let gameStarted = false;
         let gameRunning = true;
+        let paused = false;
+        let overShown = false;
+        let assetsReady = false;
+        let shake = 0;
+        let shownScore = -1;
+        let shownBest = -1;
+        let shownSpeed = '';
         let score = 0;
-        let highScore = parseInt(localStorage.getItem('ribHighScore')) || 0;
+        let highScore = 0;
+        try {
+            highScore = parseInt(localStorage.getItem('ribHighScore'), 10) || 0;
+        } catch (e) {
+            highScore = 0;
+        }
         
         let isJumping = false;
         let yPos = 0;
@@ -232,6 +787,20 @@
         
         function imageLoaded() {
             if (++loadedCount >= totalToLoad) bgObjectsReady = true;
+            updateLoadingUi();
+        }
+        
+        function updateLoadingUi() {
+            const pct = Math.min(100, Math.round(loadedCount / totalToLoad * 100));
+            if (el.loadBar) el.loadBar.style.width = pct + '%';
+            if (el.loadPct) el.loadPct.textContent = pct + '%';
+            
+            if (loadedCount >= totalToLoad && !assetsReady) {
+                assetsReady = true;
+                el.menuBest.textContent = String(highScore);
+                showScreen(el.menu);
+                updateChrome();
+            }
         }
         
         for (const src of RUN_FRAMES) {
@@ -753,126 +1322,27 @@
             drawHitbox(x + hitboxX, y + hitboxY, hitboxW, hitboxH, "rgba(255,0,0,0.45)");
         }
         
-        function drawUI() {
-            const margin = 8;
-            const panelH = uiFontSize * 2.2;
+        function draw() {
+            ctx.save();
             
-            // Левый верхний — СЧЁТ + скорость
-            ctx.fillStyle = "rgba(0,0,0,0.6)";
-            ctx.fillRect(margin, margin, uiPanelWidth, panelH);
-            ctx.fillStyle = "#ffd966";
-            ctx.font = `bold ${uiFontSize - 2}px monospace`;
-            ctx.fillText("СЧЁТ", margin + 6, margin + uiFontSize);
-            
-            ctx.fillStyle = "#fff";
-            ctx.font = `bold ${uiFontSize + 2}px monospace`;
-            const scoreText = String(Math.floor(score));
-            ctx.fillText(scoreText, margin + 6, margin + uiFontSize * 1.7);
-            
-            // Индикатор скорости рядом со счётом
-            const scoreWidth = ctx.measureText(scoreText).width;
-            const speedMult = currentSpeed / CONFIG.BASE_SPEED_PX_PER_SEC;
-            ctx.fillStyle = "#ff9966";
-            ctx.font = `bold ${uiFontSize - 3}px monospace`;
-            ctx.fillText(`x${speedMult.toFixed(1)}`, margin + 6 + scoreWidth + 8, margin + uiFontSize * 1.7);
-            
-            // Правый верхний — РЕКОРД
-            ctx.fillStyle = "rgba(0,0,0,0.6)";
-            ctx.fillRect(screenWidth - uiPanelWidth - margin, margin, uiPanelWidth, panelH);
-            ctx.fillStyle = "#ffd966";
-            ctx.font = `bold ${uiFontSize - 2}px monospace`;
-            ctx.fillText("РЕКОРД", screenWidth - uiPanelWidth - margin + 6, margin + uiFontSize);
-            ctx.fillStyle = "#fff";
-            ctx.font = `bold ${uiFontSize + 2}px monospace`;
-            ctx.fillText(highScore, screenWidth - uiPanelWidth - margin + 6, margin + uiFontSize * 1.7);
-            
-            // Музыка
-            const musicW = uiFontSize * 2.8;
-            const musicH = uiFontSize * 1.4;
-            const musicX = screenWidth - musicW - margin;
-            const musicY = margin + panelH + 5;
-            ctx.fillStyle = musicEnabled ? "#2a7a2a" : "#555";
-            ctx.fillRect(musicX, musicY, musicW, musicH);
-            ctx.fillStyle = "#fff";
-            ctx.font = `${uiFontSize - 2}px monospace`;
-            ctx.fillText(musicEnabled ? "🎵" : "🔇", musicX + musicW/2 - 6, musicY + musicH - 4);
-        }
-        
-        function drawGameOver() {
-            ctx.fillStyle = "rgba(0,0,0,0.85)";
-            ctx.fillRect(0, 0, screenWidth, screenHeight);
-            
-            ctx.font = `bold ${gameOverFontSize}px monospace`;
-            ctx.fillStyle = "#ffaa66";
-            const goText = "GAME OVER";
-            const tw = ctx.measureText(goText).width;
-            ctx.fillText(goText, screenWidth/2 - tw/2, screenHeight/2 - 60);
-            
-            if (showRecordNotification && recordNotificationTimer > 0) {
-                const opacity = Math.min(1, recordNotificationTimer / 0.5);
-                const notifW = screenWidth * 0.7;
-                const notifH = gameOverFontSize * 1.2;
-                const notifX = (screenWidth - notifW) / 2;
-                const notifY = 20;
-                ctx.globalAlpha = opacity * 0.95;
-                ctx.fillStyle = "#1a1a2e";
-                ctx.fillRect(notifX, notifY, notifW, notifH);
-                ctx.fillStyle = "#ffd700";
-                ctx.fillRect(notifX, notifY, notifW, 3);
-                ctx.globalAlpha = opacity;
-                ctx.font = `bold ${gameOverFontSize * 0.55}px monospace`;
-                ctx.fillStyle = "#ffd700";
-                ctx.fillText("🏆", notifX + 15, notifY + notifH - 12);
-                ctx.fillStyle = "#ffffff";
-                const t = `НОВЫЙ РЕКОРД! ${Math.floor(highScore)} очков`;
-                const w = ctx.measureText(t).width;
-                ctx.fillText(t, notifX + (notifW - w) / 2, notifY + notifH - 12);
-                ctx.globalAlpha = 1;
+            // Тряска камеры при смерти
+            if (shake > 0) {
+                const m = shake * 10;
+                ctx.translate((Math.random() * 2 - 1) * m, (Math.random() * 2 - 1) * m);
             }
             
-            const btnX = screenWidth/2 - gameOverBtnW/2;
-            const btnY = screenHeight/2 + 40;
-            ctx.fillStyle = "#d96c1e";
-            ctx.fillRect(btnX, btnY, gameOverBtnW, gameOverBtnH);
-            ctx.fillStyle = "#fff";
-            ctx.font = `bold ${gameOverFontSize - 6}px monospace`;
-            const txt = "▶ НОВАЯ ИГРА";
-            const btw = ctx.measureText(txt).width;
-            ctx.fillText(txt, screenWidth/2 - btw/2, btnY + gameOverBtnH - 10);
-        }
-        
-        function drawStartScreen() {
-            ctx.fillStyle = "rgba(0,0,0,0.88)";
-            ctx.fillRect(0, 0, screenWidth, screenHeight);
-            
-            const ts = Math.max(20, Math.floor(screenWidth / 26));
-            ctx.font = `bold ${ts}px monospace`;
-            ctx.fillStyle = "#ffaa66";
-            const title = "👉 НАЖМИТЕ, ЧТОБЫ НАЧАТЬ 👈";
-            const tw = ctx.measureText(title).width;
-            ctx.fillText(title, screenWidth/2 - tw/2, screenHeight/2 - 40);
-            
-            ctx.font = `${ts - 6}px monospace`;
-            ctx.fillStyle = "#ccc";
-            const sub = "Legends Of Manzan";
-            const sw = ctx.measureText(sub).width;
-            ctx.fillText(sub, screenWidth/2 - sw/2, screenHeight/2 + 20);
-        }
-        
-        function draw() {
-            if (!gameStarted) { drawStartScreen(); return; }
             drawParisBackground();
             drawGrass();
             drawBackgroundObjects();
             for (const obs of obstacles) obs.draw();
             drawEffects();
             drawPlayer();
-            drawUI();
-            if (!gameRunning && deathTimer <= 0) drawGameOver();
+            
+            ctx.restore();
         }
         
         function updateGame(dt) {
-            if (!gameStarted) return;
+            if (!gameStarted || paused) return;
             
             updateEffects(dt);
             
@@ -943,17 +1413,27 @@
             const hit = checkCollisionHit();
             if (hit) {
                 gameRunning = false;
+                overShown = false;
                 deathTimer = CONFIG.DEATH_DELAY_SECONDS;
+                shake = 0.3;
                 playRandomDeathSound();
                 stopMusic();
+                updateChrome();
                 
                 obstacles = obstacles.filter(o => o !== hit);
                 breakObstacle(hit);
                 
-                const prev = parseInt(localStorage.getItem('ribHighScore')) || 0;
+                let prev = 0;
+                try {
+                    prev = parseInt(localStorage.getItem('ribHighScore'), 10) || 0;
+                } catch (err) {
+                    prev = 0;
+                }
                 if (Math.floor(score) > prev) {
                     highScore = Math.floor(score);
-                    localStorage.setItem('ribHighScore', highScore);
+                    try {
+                        localStorage.setItem('ribHighScore', highScore);
+                    } catch (err) {}
                     showRecordNotification = true;
                     recordNotificationTimer = RECORD_NOTIF_DURATION;
                     setTimeout(() => {
@@ -963,12 +1443,68 @@
                         }
                     }, 500);
                 }
+                
+                // Даём осколкам и тряске отыграть, затем показываем финал
+                setTimeout(() => {
+                    if (!gameRunning && gameStarted && !paused) showGameOver();
+                }, CONFIG.DEATH_DELAY_SECONDS * 1000 + 60);
             }
         }
         
-        function restartGame() {
-            gameRunning = true;
+        function showScreen(screen) {
+            for (const s of [el.loading, el.menu, el.over, el.pauseScreen]) {
+                if (s) s.hidden = true;
+            }
+            if (screen) screen.hidden = false;
+        }
+        
+        function updateChrome() {
+            const playing = gameStarted && gameRunning && !paused;
+            el.sound.textContent = soundEnabled ? '🔊' : '🔇';
+            el.sound.classList.toggle('is-off', !soundEnabled);
+            el.pause.hidden = !(playing || paused);
+            el.pause.textContent = paused ? '▶' : '⏸';
+            el.pause.setAttribute('aria-label', paused ? 'Продолжить' : 'Пауза');
+            el.jump.hidden = !playing;
+            el.menuBest.textContent = String(highScore);
+        }
+        
+        function updateHud() {
+            const v = Math.floor(score);
+            if (v !== shownScore) {
+                shownScore = v;
+                el.score.textContent = String(v);
+            }
+            const b = Math.max(highScore, v);
+            if (b !== shownBest) {
+                shownBest = b;
+                el.best.textContent = String(b);
+            }
+            const sp = 'x' + (currentSpeed / CONFIG.BASE_SPEED_PX_PER_SEC).toFixed(1);
+            if (sp !== shownSpeed) {
+                shownSpeed = sp;
+                el.speed.textContent = sp;
+            }
+        }
+        
+        function showGameOver() {
+            if (overShown || gameRunning || !gameStarted) return;
+            overShown = true;
             deathTimer = 0;
+            el.overScore.textContent = String(Math.floor(score));
+            el.overBest.textContent = String(highScore);
+            el.record.hidden = !showRecordNotification;
+            showScreen(el.over);
+            updateChrome();
+        }
+        
+        function restartGame() {
+            gameStarted = true;
+            gameRunning = true;
+            paused = false;
+            overShown = false;
+            deathTimer = 0;
+            shake = 0;
             score = 0;
             obstacles = [];
             bgObjectsList = [];
@@ -983,51 +1519,79 @@
             showRecordNotification = false;
             recordNotificationTimer = 0;
             currentSpeed = CONFIG.BASE_SPEED_PX_PER_SEC;
-            if (gameStarted && musicEnabled && soundEnabled) startMusic();
-        }
-        
-        function jump() {
-            if (!gameStarted || !gameRunning) return;
-            if (!isJumping && yPos >= 0) pendingJump = true;
+            
+            showScreen(null);
+            el.hud.hidden = false;
+            updateChrome();
+            updateHud();
+            
+            if (musicEnabled && soundEnabled) startMusic();
         }
         
         function startGame() {
             if (gameStarted) return;
-            gameStarted = true;
+            requestFullscreen();
             restartGame();
         }
         
-        function handleCanvasClick(e) {
-            const rect = canvas.getBoundingClientRect();
-            const sx = screenWidth / rect.width;
-            const sy = screenHeight / rect.height;
-            let cx, cy;
-            if (e.touches) {
-                cx = e.touches[0].clientX; cy = e.touches[0].clientY; e.preventDefault();
-            } else { cx = e.clientX; cy = e.clientY; }
-            const x = (cx - rect.left) * sx;
-            const y = (cy - rect.top) * sy;
+        function toMenu() {
+            stopMusic();
+            gameStarted = false;
+            gameRunning = true;
+            paused = false;
+            overShown = false;
+            deathTimer = 0;
+            shake = 0;
+            score = 0;
+            obstacles = [];
+            bgObjectsList = [];
+            fragments = [];
+            breakingObstacles = [];
+            isJumping = false;
+            yPos = 0;
+            yVelocity = 0;
+            pendingJump = false;
+            currentSpeed = CONFIG.BASE_SPEED_PX_PER_SEC;
             
-            if (gameStarted && !gameRunning && deathTimer <= 0) {
-                const bx = screenWidth/2 - gameOverBtnW/2;
-                const by = screenHeight/2 + 40;
-                if (x >= bx && x <= bx + gameOverBtnW && y >= by && y <= by + gameOverBtnH) {
-                    restartGame();
-                    return;
-                }
-            }
-            
-            // Только кнопка музыки кликабельна
-            if (gameStarted) {
-                const margin = 8;
-                const panelH = uiFontSize * 2.2;
-                const mw = uiFontSize * 2.8, mh = uiFontSize * 1.4;
-                const mx = screenWidth - mw - margin, my = margin + panelH + 5;
-                if (x >= mx && x <= mx + mw && y >= my && y <= my + mh) { toggleMusic(); return; }
-            }
-            
-            if (!gameStarted) { requestFullscreen(); startGame(); }
-            else if (gameRunning) jump();
+            el.hud.hidden = true;
+            el.menuBest.textContent = String(highScore);
+            showScreen(el.menu);
+            updateChrome();
+        }
+        
+        function pauseGame() {
+            if (!gameStarted || !gameRunning || paused) return;
+            paused = true;
+            stopMusic();
+            el.pauseScore.textContent = String(Math.floor(score));
+            showScreen(el.pauseScreen);
+            updateChrome();
+        }
+        
+        function resumeGame() {
+            if (!paused) return;
+            paused = false;
+            showScreen(null);
+            updateChrome();
+            if (musicEnabled && soundEnabled) startMusic();
+        }
+        
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            musicEnabled = soundEnabled;
+            if (!soundEnabled) stopMusic();
+            else if (gameStarted && gameRunning && !paused) startMusic();
+            updateChrome();
+        }
+        
+        function jump() {
+            if (!gameStarted || !gameRunning || paused) return;
+            if (!isJumping && yPos >= 0) pendingJump = true;
+        }
+        
+        function handleCanvasTap(e) {
+            if (e) e.preventDefault();
+            if (gameStarted && gameRunning && !paused) jump();
         }
         
         window.addEventListener('resize', () => {
@@ -1036,17 +1600,70 @@
         });
         window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
         
-        canvas.addEventListener('click', handleCanvasClick);
-        canvas.addEventListener('touchstart', handleCanvasClick, { passive: false });
+        canvas.addEventListener('pointerdown', handleCanvasTap);
+        
+        // Кнопки интерфейса
+        el.play.addEventListener('click', startGame);
+        el.again.addEventListener('click', restartGame);
+        el.menuBtn.addEventListener('click', toMenu);
+        el.resume.addEventListener('click', resumeGame);
+        el.pauseMenu.addEventListener('click', toMenu);
+        el.sound.addEventListener('click', toggleSound);
+        el.pause.addEventListener('click', () => {
+            if (paused) resumeGame();
+            else pauseGame();
+        });
+        el.fs.addEventListener('click', async () => {
+            try {
+                if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+                else await document.exitFullscreen();
+            } catch (err) {}
+        });
+        el.jump.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            jump();
+        });
+        
+        // Тап по свободному месту на оверлее
+        function overlayTap(screen, action) {
+            screen.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('button')) return;
+                e.preventDefault();
+                action();
+            });
+        }
+        overlayTap(el.menu, startGame);
+        overlayTap(el.over, restartGame);
+        overlayTap(el.pauseScreen, resumeGame);
         
         document.addEventListener('keydown', (e) => {
             // Хитбоксы — только клавишей O
             if (e.key === 'o' || e.key === 'O') { e.preventDefault(); showHitboxes = !showHitboxes; return; }
-            if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'Space') {
-                e.preventDefault();
-                if (!gameStarted) { requestFullscreen(); startGame(); }
-                else if (gameRunning) jump();
+            
+            if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+                if (gameStarted && gameRunning) {
+                    e.preventDefault();
+                    if (paused) resumeGame(); else pauseGame();
+                }
+                return;
             }
+            
+            if (e.key === 'm' || e.key === 'M') {
+                e.preventDefault();
+                toggleSound();
+                return;
+            }
+            
+            if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'Space' || e.key === 'w' || e.key === 'W') {
+                e.preventDefault();
+                if (!gameStarted) startGame();
+                else if (paused) resumeGame();
+                else if (gameRunning) jump();
+                else if (overShown) restartGame();
+                return;
+            }
+            
             if (e.key === 'r' || e.key === 'R') {
                 e.preventDefault();
                 if (!gameStarted) startGame(); else restartGame();
@@ -1054,11 +1671,15 @@
         });
         
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) lastTime = performance.now();
+            lastTime = performance.now();
+            if (document.hidden && gameStarted && gameRunning && !paused) pauseGame();
         });
         
         initSounds();
         resizeCanvas();
+        updateLoadingUi();
+        updateChrome();
+        updateHud();
         
         let lastTime = performance.now();
         
@@ -1067,10 +1688,34 @@
             lastTime = now;
             if (!isFinite(dt) || dt < 0) dt = 0;
             if (dt > MAX_DT) dt = MAX_DT;
+            
+            if (shake > 0) shake = Math.max(0, shake - dt);
+            
             updateGame(dt);
             draw();
+            updateHud();
             requestAnimationFrame(gameLoop);
         }
+        window.__idx2 = {
+            start: startGame,
+            restart: restartGame,
+            pause: pauseGame,
+            resume: resumeGame,
+            menu: toMenu,
+            forceDeath: (pts) => {
+                if (typeof pts === 'number') score = pts;
+                obstacles.push(new Ribs(playerX - obstacleSize * 0.35));
+            },
+            state: () => ({
+                gameStarted, gameRunning, paused, overShown, deathTimer, shake,
+                score: Math.floor(score), highScore,
+                screen: el.loading.hidden ? (el.menu.hidden ? (el.over.hidden ? (el.pauseScreen.hidden ? 'playing' : 'paused') : 'over') : 'menu') : 'loading',
+                hud: !el.hud.hidden,
+                music: musicEnabled, sound: soundEnabled,
+                loadedCount, totalToLoad,
+            }),
+        };
+        
         requestAnimationFrame(gameLoop);
     })();
 </script>
