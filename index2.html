@@ -762,6 +762,7 @@ canvas {
         let recordSound = null;
         let jumpSounds = [];
         let deathSounds = [];
+        let brokeSounds = [];
         
         let loadedCount = 0;
         let showHitboxes = false;
@@ -1059,8 +1060,18 @@ canvas {
         }
         function playRandomDeathSound() {
             if (!soundEnabled) return;
-            const s = deathSounds[Math.floor(Math.random() * deathSounds.length)];
-            if (s) { s.currentTime = 0; s.play().catch(() => {}); }
+        
+            // 1) случайный звук смерти
+            if (deathSounds.length) {
+                const a = deathSounds[Math.floor(Math.random() * deathSounds.length)];
+                if (a) { a.currentTime = 0; a.play().catch(() => {}); }
+            }
+        
+            // 2) звук разбивания — параллельно
+            if (brokeSounds.length) {
+                const b = brokeSounds[Math.floor(Math.random() * brokeSounds.length)];
+                if (b) { b.currentTime = 0; b.play().catch(() => {}); }
+            }
         }
         function startMusic() {
             if (bgMusic && musicEnabled && soundEnabled && gameStarted && gameRunning)
@@ -1079,6 +1090,7 @@ canvas {
             recordSound = createAudio(RECORD_SOUND, false, 0.7);
             JUMP_SOUNDS.forEach(s => { const a = createAudio(s, false, 0.5); if (a) jumpSounds.push(a); });
             DEATH_SOUNDS.forEach(s => { const a = createAudio(s, false, 0.6); if (a) deathSounds.push(a); });
+            BROKE_SOUNDS.forEach(s => { const b = createAudio(s, false, 0.6); if (b) brokeSounds.push(b); });
         }
         
         function drawHitbox(x, y, w, h, color = "rgba(255,0,0,0.4)") {
